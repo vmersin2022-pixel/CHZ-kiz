@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import { UploadArea } from './components/UploadArea';
 import { ProductTable } from './components/ProductTable';
 import { TemplateSelector } from './components/TemplateSelector';
@@ -8,7 +8,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from './com
 import { parseXML, ProductItem } from './lib/xmlParser';
 import { generatePDF, DEFAULT_TEMPLATES, LabelTemplate } from './lib/labelGenerator';
 import { checkPrintedCodes, createPrintSession, recordPrintedCodes } from './lib/db';
-import { Printer, FileDown, RefreshCw, AlertCircle, Database } from 'lucide-react';
+import { Printer, FileDown, RefreshCw, AlertCircle, Database, Search, Filter, ArrowUp, ArrowDown, Loader2 } from 'lucide-react';
 
 function App() {
   const [items, setItems] = useState<ProductItem[]>([]);
@@ -18,9 +18,15 @@ function App() {
   const [selectedTemplate, setSelectedTemplate] = useState<LabelTemplate>(DEFAULT_TEMPLATES[0]);
   const [isGenerating, setIsGenerating] = useState(false);
   const [isCheckingDb, setIsCheckingDb] = useState(false);
+  const [dbCheckProgress, setDbCheckProgress] = useState<{ current: number, total: number } | null>(null);
   const [batchSize, setBatchSize] = useState<number>(200);
 
   const [currentFileName, setCurrentFileName] = useState<string>("");
+
+  // Search, Filter, Sort State
+  const [searchTerm, setSearchTerm] = useState("");
+  const [filterStatus, setFilterStatus] = useState<'all' | 'new' | 'printed'>('all');
+  const [sortConfig, setSortConfig] = useState<{ key: keyof ProductItem | 'status', direction: 'asc' | 'desc' } | null>(null);
 
   const handleFileSelect = async (file: File) => {
     setIsProcessing(true);
@@ -28,6 +34,7 @@ function App() {
     setItems([]);
     setSelectedIds(new Set());
     setCurrentFileName(file.name);
+    setDbCheckProgress(null);
 
     const reader = new FileReader();
     reader.onload = async (e) => {
@@ -39,7 +46,10 @@ function App() {
         // Check DB for printed codes
         setIsCheckingDb(true);
         try {
-          const printedSet = await checkPrintedCodes(parsedItems);
+          const printedSet = await checkPrintedCodes(parsedItems, (current, total) => {
+             setDbCheckProgress({ current, total });
+          });
+          
           parsedItems = parsedItems.map(item => ({
             ...item,
             isPrinted: printedSet.has(item.fullCode)
@@ -49,6 +59,7 @@ function App() {
           setErrors(prev => [...prev, "Не удалось проверить статус печати в базе данных"]);
         } finally {
           setIsCheckingDb(false);
+          setDbCheckProgress(null);
         }
 
         setItems(parsedItems);
@@ -70,10 +81,69 @@ function App() {
     reader.readAsText(file);
   };
 
+  const filteredItems = useMemo(() => {
+    let result = [...items];
+
+    // Filter by Search
+    if (searchTerm) {
+      const lower = searchTerm.toLowerCase();
+      result = result.filter(i => 
+        i.name.toLowerCase().includes(lower) || 
+        (i.gtin && i.gtin.includes(lower)) || 
+        (i.serial && i.serial.includes(lower)) ||
+        (i.fullCode && i.fullCode.includes(lower))
+      );
+    }
+
+    // Filter by Status
+    if (filterStatus === 'new') {
+      result = result.filter(i => !i.isPrinted);
+    } else if (filterStatus === 'printed') {
+      result = result.filter(i => i.isPrinted);
+    }
+
+    // Sort
+    if (sortConfig) {
+      result.sort((a, b) => {
+        let aValue: any = sortConfig.key === 'status' ? (a.isPrinted ? 1 : 0) : a[sortConfig.key];
+        let bValue: any = sortConfig.key === 'status' ? (b.isPrinted ? 1 : 0) : b[sortConfig.key];
+        
+        if (typeof aValue === 'string') aValue = aValue.toLowerCase();
+        if (typeof bValue === 'string') bValue = bValue.toLowerCase();
+
+        if (aValue < bValue) return sortConfig.direction === 'asc' ? -1 : 1;
+        if (aValue > bValue) return sortConfig.direction === 'asc' ? 1 : -1;
+        return 0;
+      });
+    }
+
+    return result;
+  }, [items, searchTerm, filterStatus, sortConfig]);
+
+  const handleSort = (key: keyof ProductItem | 'status') => {
+    setSortConfig(current => {
+      if (current?.key === key) {
+        return { key, direction: current.direction === 'asc' ? 'desc' : 'asc' };
+      }
+      return { key, direction: 'asc' };
+    });
+  };
+
   const handleSelectBatch = () => {
-    const unprintedItems = items.filter(item => !item.isPrinted);
-    const toSelect = unprintedItems.slice(0, batchSize);
-    const newSelected = new Set(toSelect.map(item => item.id));
+    // Select from the filtered list, but prioritize unprinted if we are in 'all' mode
+    // If we are in 'printed' mode, we select printed ones (reprint scenario)
+    // If we are in 'new' mode, we select new ones.
+    
+    let candidates = filteredItems;
+    
+    // If showing ALL, default to selecting NEW items first
+    if (filterStatus === 'all') {
+        candidates = filteredItems.filter(item => !item.isPrinted);
+    }
+
+    const toSelect = candidates.slice(0, batchSize);
+    const newSelected = new Set(selectedIds);
+    toSelect.forEach(item => newSelected.add(item.id));
     setSelectedIds(newSelected);
   };
 
@@ -249,7 +319,11 @@ function App() {
                       <p className="text-sm text-green-700">
                         {items.length} товаров найдено 
                         {isCheckingDb ? (
-                          <span className="ml-2 text-slate-500 animate-pulse">Проверка базы данных...</span>
+                          <span className="ml-2 text-slate-500 animate-pulse flex items-center gap-1 inline-flex">
+                            <Loader2 className="animate-spin h-3 w-3" />
+                            Проверка базы... 
+                            {dbCheckProgress && `(${Math.round((dbCheckProgress.current / dbCheckProgress.total) * 100)}%)`}
+                          </span>
                         ) : (
                           <span className="ml-2 text-slate-500">
                             ({items.filter(i => i.isPrinted).length} уже напечатано)
@@ -317,10 +391,51 @@ function App() {
                   </div>
                 </CardHeader>
                 <CardContent>
+                  <div className="flex flex-col md:flex-row gap-4 mb-4">
+                    <div className="relative flex-1">
+                        <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-slate-400" />
+                        <input
+                            type="text"
+                            placeholder="Поиск по названию, GTIN или серийному номеру..."
+                            className="w-full pl-9 pr-4 py-2 text-sm border rounded-md border-slate-200 focus:outline-none focus:ring-2 focus:ring-slate-400"
+                            value={searchTerm}
+                            onChange={(e) => setSearchTerm(e.target.value)}
+                        />
+                    </div>
+                    <div className="flex gap-2">
+                        <Button 
+                            variant={filterStatus === 'all' ? 'default' : 'outline'} 
+                            size="sm"
+                            onClick={() => setFilterStatus('all')}
+                            className={filterStatus === 'all' ? "bg-slate-900 text-white" : ""}
+                        >
+                            Все
+                        </Button>
+                        <Button 
+                            variant={filterStatus === 'new' ? 'default' : 'outline'} 
+                            size="sm"
+                            onClick={() => setFilterStatus('new')}
+                            className={filterStatus === 'new' ? "bg-blue-600 text-white hover:bg-blue-700" : "text-blue-600 border-blue-200 hover:bg-blue-50"}
+                        >
+                            Новые
+                        </Button>
+                        <Button 
+                            variant={filterStatus === 'printed' ? 'default' : 'outline'} 
+                            size="sm"
+                            onClick={() => setFilterStatus('printed')}
+                            className={filterStatus === 'printed' ? "bg-gray-600 text-white hover:bg-gray-700" : "text-gray-600 border-gray-200 hover:bg-gray-50"}
+                        >
+                            Напечатанные
+                        </Button>
+                    </div>
+                  </div>
+
                   <ProductTable 
-                    items={items} 
+                    items={filteredItems} 
                     selectedIds={selectedIds}
                     onSelectionChange={setSelectedIds}
+                    onSort={handleSort}
+                    sortConfig={sortConfig}
                   />
                 </CardContent>
               </Card>

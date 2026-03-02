@@ -1,19 +1,32 @@
 import React, { useState, useEffect } from 'react';
 import { ProductItem } from '@/lib/xmlParser';
-import { Check, X, ChevronLeft, ChevronRight } from 'lucide-react';
+import { Check, X, ChevronLeft, ChevronRight, ArrowUp, ArrowDown } from 'lucide-react';
 import { Button } from './ui/button';
 
 interface ProductTableProps {
   items: ProductItem[];
   selectedIds: Set<string>;
   onSelectionChange: (ids: Set<string>) => void;
+  onSort?: (key: keyof ProductItem | 'status') => void;
+  sortConfig?: { key: keyof ProductItem | 'status', direction: 'asc' | 'desc' } | null;
 }
 
-export const ProductTable: React.FC<ProductTableProps> = ({ items, selectedIds, onSelectionChange }) => {
+export const ProductTable: React.FC<ProductTableProps> = ({ items, selectedIds, onSelectionChange, onSort, sortConfig }) => {
   const [currentPage, setCurrentPage] = useState(1);
   const itemsPerPage = 50;
   
-  if (items.length === 0) return null;
+  // Reset page when items change (e.g. filter applied)
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [items.length]); // Simple heuristic, better to depend on filter criteria but items.length is okayish
+
+  if (items.length === 0) {
+      return (
+          <div className="p-8 text-center text-slate-500 bg-slate-50 rounded-lg border border-slate-200 border-dashed">
+              Ничего не найдено по вашему запросу
+          </div>
+      );
+  }
 
   const totalPages = Math.ceil(items.length / itemsPerPage);
   const startIndex = (currentPage - 1) * itemsPerPage;
@@ -52,16 +65,33 @@ export const ProductTable: React.FC<ProductTableProps> = ({ items, selectedIds, 
     onSelectionChange(newSelected);
   };
 
+  const SortIcon = ({ columnKey }: { columnKey: keyof ProductItem | 'status' }) => {
+      if (sortConfig?.key !== columnKey) return null;
+      return sortConfig.direction === 'asc' ? <ArrowUp size={14} className="ml-1" /> : <ArrowDown size={14} className="ml-1" />;
+  };
+
+  const HeaderCell = ({ columnKey, label, className = "" }: { columnKey: keyof ProductItem | 'status', label: string, className?: string }) => (
+      <th 
+          className={`px-4 py-3 cursor-pointer hover:bg-slate-100 transition-colors select-none ${className}`}
+          onClick={() => onSort && onSort(columnKey)}
+      >
+          <div className="flex items-center">
+              {label}
+              <SortIcon columnKey={columnKey} />
+          </div>
+      </th>
+  );
+
   return (
     <div className="rounded-md border border-slate-200 overflow-hidden bg-white">
       {/* Toolbar */}
       <div className="p-4 border-b border-slate-200 bg-slate-50 flex flex-wrap gap-4 justify-between items-center">
         <div className="flex gap-2">
             <Button variant="outline" size="sm" onClick={handleSelectAll}>
-                {selectedIds.size === items.length ? "Снять все" : "Выбрать все"}
+                {selectedIds.size === items.length && items.length > 0 ? "Снять все" : "Выбрать все"}
             </Button>
             <Button variant="outline" size="sm" onClick={handleSelectPage}>
-                {currentItems.every(i => selectedIds.has(i.id)) ? "Снять со страницы" : "Выбрать страницу"}
+                {currentItems.length > 0 && currentItems.every(i => selectedIds.has(i.id)) ? "Снять со страницы" : "Выбрать страницу"}
             </Button>
         </div>
         <div className="text-sm text-slate-600">
@@ -81,10 +111,10 @@ export const ProductTable: React.FC<ProductTableProps> = ({ items, selectedIds, 
                     className="rounded border-slate-300"
                 />
               </th>
-              <th className="px-4 py-3">Наименование</th>
-              <th className="px-4 py-3 w-32">GTIN</th>
-              <th className="px-4 py-3 w-32">Серийный номер</th>
-              <th className="px-4 py-3 w-24 text-center">Статус</th>
+              <HeaderCell columnKey="name" label="Наименование" />
+              <HeaderCell columnKey="gtin" label="GTIN" className="w-32" />
+              <HeaderCell columnKey="serial" label="Серийный номер" className="w-32" />
+              <HeaderCell columnKey="status" label="Статус" className="w-24 text-center justify-center" />
               <th className="px-4 py-3 w-24 text-center">Валиден</th>
             </tr>
           </thead>

@@ -1,7 +1,10 @@
 import { supabase } from './supabaseClient';
 import { ProductItem } from './xmlParser';
 
-export async function checkPrintedCodes(items: ProductItem[]): Promise<Set<string>> {
+export async function checkPrintedCodes(
+  items: ProductItem[], 
+  onProgress?: (current: number, total: number) => void
+): Promise<Set<string>> {
   if (items.length === 0) return new Set();
 
   const codes = items.map(i => i.fullCode).filter(Boolean);
@@ -10,6 +13,8 @@ export async function checkPrintedCodes(items: ProductItem[]): Promise<Set<strin
   // Chunking is still good practice for large arrays
   const printedCodes = new Set<string>();
   const chunkSize = 200; // RPC can handle larger chunks
+  const total = codes.length;
+  let processed = 0;
 
   for (let i = 0; i < codes.length; i += chunkSize) {
     const chunk = codes.slice(i, i + chunkSize);
@@ -25,6 +30,11 @@ export async function checkPrintedCodes(items: ProductItem[]): Promise<Set<strin
     if (data) {
       // data is an array of strings (full_code)
       data.forEach((code: string) => printedCodes.add(code));
+    }
+
+    processed += chunk.length;
+    if (onProgress) {
+        onProgress(Math.min(processed, total), total);
     }
   }
 
