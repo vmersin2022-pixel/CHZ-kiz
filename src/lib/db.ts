@@ -87,3 +87,26 @@ export async function recordPrintedCodes(items: ProductItem[], sessionId: string
     }
   }
 }
+
+export interface PrintSession {
+  id: string;
+  created_at: string;
+  filename: string;
+  total_codes: number;
+  notes: string;
+}
+
+export async function getPrintSessions(): Promise<PrintSession[]> {
+  const { data, error } = await supabase
+    .from('print_sessions')
+    .select('*')
+    .order('created_at', { ascending: false })
+    .limit(50);
+
+  if (error) {
+    console.error('Error fetching print sessions:', error);
+    return [];
+  }
+
+  return data || [];
+}

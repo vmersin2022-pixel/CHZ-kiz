@@ -8,7 +8,8 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from './com
 import { parseXML, ProductItem } from './lib/xmlParser';
 import { generatePDF, DEFAULT_TEMPLATES, LabelTemplate } from './lib/labelGenerator';
 import { checkPrintedCodes, createPrintSession, recordPrintedCodes } from './lib/db';
-import { Printer, FileDown, RefreshCw, AlertCircle, Database, Search, Filter, ArrowUp, ArrowDown, Loader2 } from 'lucide-react';
+import { Printer, FileDown, RefreshCw, AlertCircle, Database, Search, Filter, ArrowUp, ArrowDown, Loader2, History } from 'lucide-react';
+import { HistoryModal } from './components/HistoryModal';
 
 function App() {
   const [items, setItems] = useState<ProductItem[]>([]);
@@ -20,6 +21,7 @@ function App() {
   const [isCheckingDb, setIsCheckingDb] = useState(false);
   const [dbCheckProgress, setDbCheckProgress] = useState<{ current: number, total: number } | null>(null);
   const [batchSize, setBatchSize] = useState<number>(200);
+  const [showHistory, setShowHistory] = useState(false);
 
   const [currentFileName, setCurrentFileName] = useState<string>("");
 
@@ -276,6 +278,10 @@ function App() {
             <p className="text-slate-500">Генератор этикеток Честный Знак из XML</p>
           </div>
           <div className="flex gap-2">
+            <Button variant="outline" onClick={() => setShowHistory(true)} className="gap-2">
+                <History size={16} />
+                История
+            </Button>
             {items.length === 0 && (
                 <Button variant="secondary" onClick={handleLoadSample}>
                     Загрузить пример
@@ -492,6 +498,7 @@ function App() {
 
         </div>
       </div>
+      <HistoryModal isOpen={showHistory} onClose={() => setShowHistory(false)} />
     </div>
   );
 }
