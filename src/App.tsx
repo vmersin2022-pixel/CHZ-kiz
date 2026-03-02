@@ -1,140 +1,299 @@
 import React, { useState } from 'react';
-import { Settings } from 'lucide-react';
-import { FileUploader } from './components/FileUploader';
+import { UploadArea } from './components/UploadArea';
+import { ProductTable } from './components/ProductTable';
+import { TemplateSelector } from './components/TemplateSelector';
 import { LabelPreview } from './components/LabelPreview';
-import { LabelSettings } from './components/LabelSettings';
-import { SessionList } from './components/SessionList';
-import { PrintDashboard } from './components/PrintDashboard';
-import { LabelTemplate, defaultTemplate } from './lib/labelGenerator';
-import { uploadSession } from './lib/db';
-import { PrintSession } from './lib/supabase';
-
-type ViewState = 'sessions' | 'upload' | 'print';
+import { Button } from './components/ui/button';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from './components/ui/card';
+import { parseXML, ProductItem } from './lib/xmlParser';
+import { generatePDF, DEFAULT_TEMPLATES, LabelTemplate } from './lib/labelGenerator';
+import { Printer, FileDown, RefreshCw, AlertCircle } from 'lucide-react';
 
 function App() {
-  const [view, setView] = useState<ViewState>('sessions');
-  const [currentSession, setCurrentSession] = useState<PrintSession | null>(null);
-  const [template, setTemplate] = useState<LabelTemplate>(defaultTemplate);
-  const [isUploading, setIsUploading] = useState(false);
+  const [items, setItems] = useState<ProductItem[]>([]);
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [errors, setErrors] = useState<string[]>([]);
+  const [isProcessing, setIsProcessing] = useState(false);
+  const [selectedTemplate, setSelectedTemplate] = useState<LabelTemplate>(DEFAULT_TEMPLATES[0]);
+  const [isGenerating, setIsGenerating] = useState(false);
 
-  const handleFileUpload = async (file: File, content: string) => {
-    setIsUploading(true);
+  const handleFileSelect = async (file: File) => {
+    setIsProcessing(true);
+    setErrors([]);
+    setItems([]);
+    setSelectedIds(new Set());
+
+    const reader = new FileReader();
+    reader.onload = async (e) => {
+      const text = e.target?.result as string;
+      if (text) {
+        const result = parseXML(text);
+        setItems(result.items);
+        setErrors(result.errors);
+        // Default select all? Or none? Let's select all for convenience
+        setSelectedIds(new Set(result.items.map(i => i.id)));
+      }
+      setIsProcessing(false);
+    };
+    reader.onerror = () => {
+      setErrors(["Failed to read file"]);
+      setIsProcessing(false);
+    };
+    reader.readAsText(file);
+  };
+
+  const getSelectedItems = () => {
+    return items.filter(item => selectedIds.has(item.id));
+  };
+
+  const handleGeneratePDF = async () => {
+    const selectedItems = getSelectedItems();
+    if (selectedItems.length === 0) {
+        alert("Please select at least one item");
+        return;
+    }
+    setIsGenerating(true);
     try {
-      const session = await uploadSession(file, content);
-      setCurrentSession(session);
-      setView('print');
-    } catch (error) {
-      console.error('Upload failed:', error);
-      alert('Ошибка загрузки файла в базу данных: ' + (error as Error).message);
+      const pdf = await generatePDF(selectedItems, selectedTemplate);
+      pdf.download(`labels-${new Date().toISOString().split('T')[0]}.pdf`);
+    } catch (e) {
+      console.error(e);
+      alert("Error generating PDF");
     } finally {
-      setIsUploading(false);
+      setIsGenerating(false);
     }
   };
 
-  const handleSelectSession = (session: PrintSession) => {
-    setCurrentSession(session);
-    setView('print');
+  const handlePrint = async () => {
+    const selectedItems = getSelectedItems();
+    if (selectedItems.length === 0) {
+        alert("Please select at least one item");
+        return;
+    }
+    setIsGenerating(true);
+    try {
+      const pdf = await generatePDF(selectedItems, selectedTemplate);
+      pdf.print();
+    } catch (e) {
+      console.error(e);
+      alert("Error preparing print");
+    } finally {
+      setIsGenerating(false);
+    }
+  };
+
+  const reset = () => {
+    setItems([]);
+    setErrors([]);
+    setSelectedIds(new Set());
+  };
+
+  const handleLoadSample = () => {
+    const sampleXML = `
+<File>
+  <Dokument>
+    <TablSchFakt>
+      <SvedTov>
+        <NaimTov>Men's Cotton T-Shirt Black L</NaimTov>
+        <KolTov>1</KolTov>
+        <NomSredIdentTov>
+          <KIGTIN>04607000123456</KIGTIN>
+          <KISer>A1B2C3D4</KISer>
+        </NomSredIdentTov>
+      </SvedTov>
+      <SvedTov>
+        <NaimTov>Women's Jeans Blue M</NaimTov>
+        <KolTov>1</KolTov>
+        <NomSredIdentTov>
+          <KIZ>010460700065432121SERIAL123</KIZ>
+        </NomSredIdentTov>
+      </SvedTov>
+       <SvedTov>
+        <NaimTov>Running Shoes Sport X</NaimTov>
+        <KolTov>1</KolTov>
+        <NomSredIdentTov>
+          <KIZ>010460700098765421RUN12345</KIZ>
+        </NomSredIdentTov>
+      </SvedTov>
+    </TablSchFakt>
+  </Dokument>
+</File>`;
+    
+    setIsProcessing(true);
+    setErrors([]);
+    setItems([]);
+    setSelectedIds(new Set());
+    
+    // Simulate delay
+    setTimeout(() => {
+        const result = parseXML(sampleXML);
+        setItems(result.items);
+        setErrors(result.errors);
+        setSelectedIds(new Set(result.items.map(i => i.id)));
+        setIsProcessing(false);
+    }, 500);
   };
 
   return (
-    <div className="min-h-screen bg-slate-50 text-slate-900 font-sans">
-      {/* Header */}
-      <header className="bg-white border-b border-slate-200 sticky top-0 z-10">
-        <div className="max-w-7xl mx-auto px-4 h-16 flex items-center justify-between">
-          <div 
-            className="flex items-center gap-2 cursor-pointer" 
-            onClick={() => setView('sessions')}
-          >
-            <div className="w-8 h-8 bg-blue-600 rounded-lg flex items-center justify-center text-white font-bold">
-              ЧЗ
-            </div>
-            <span className="font-bold text-lg tracking-tight">ЧестныйПринт</span>
+    <div className="min-h-screen bg-slate-50 p-4 md:p-8 font-sans text-slate-900">
+      <div className="max-w-5xl mx-auto space-y-8">
+        
+        {/* Header */}
+        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+          <div>
+            <h1 className="text-3xl font-bold tracking-tight text-slate-900">LabelWizard</h1>
+            <p className="text-slate-500">Honest Sign XML Parser & Label Generator</p>
           </div>
-          
-          <div className="flex items-center gap-4">
-             {/* Template Settings Button - always visible or only in print view? */}
-             {/* Let's keep it simple for now */}
+          <div className="flex gap-2">
+            {items.length === 0 && (
+                <Button variant="secondary" onClick={handleLoadSample}>
+                    Load Sample Data
+                </Button>
+            )}
+            {items.length > 0 && (
+                <Button variant="outline" onClick={reset} className="gap-2">
+                <RefreshCw size={16} />
+                Start Over
+                </Button>
+            )}
           </div>
         </div>
-      </header>
 
-      <main>
-        {view === 'sessions' && (
-          <SessionList 
-            onSelectSession={handleSelectSession} 
-            onNewSession={() => setView('upload')} 
-          />
-        )}
-
-        {view === 'upload' && (
-          <div className="max-w-4xl mx-auto p-6">
-            <button 
-              onClick={() => setView('sessions')}
-              className="mb-6 text-slate-500 hover:text-slate-800 flex items-center gap-2"
-            >
-              ← Назад к истории
-            </button>
+        {/* Main Content */}
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+          
+          {/* Left Column: Input & Config */}
+          <div className="lg:col-span-2 space-y-6">
             
-            <div className="bg-white rounded-2xl shadow-sm border border-slate-200 p-8">
-              <h2 className="text-2xl font-bold mb-6 text-center">Загрузка нового файла</h2>
-              {isUploading ? (
-                <div className="text-center py-12">
-                  <div className="animate-spin w-12 h-12 border-4 border-blue-600 border-t-transparent rounded-full mx-auto mb-4"></div>
-                  <p className="text-lg text-slate-600">Обработка и сохранение кодов в базу...</p>
-                  <p className="text-sm text-slate-400 mt-2">Это может занять некоторое время для больших файлов</p>
-                </div>
-              ) : (
-                <FileUploader onFileLoaded={handleFileUpload} />
-              )}
-            </div>
-          </div>
-        )}
-
-        {view === 'print' && currentSession && (
-          <div className="flex flex-col lg:flex-row h-[calc(100vh-64px)] overflow-hidden">
-            {/* Left: Dashboard */}
-            <div className="flex-1 overflow-y-auto bg-slate-50">
-              <PrintDashboard 
-                session={currentSession} 
-                onBack={() => setView('sessions')}
-                template={template}
-              />
-            </div>
-
-            {/* Right: Preview & Settings (Collapsible or Fixed) */}
-            <div className="w-full lg:w-[400px] bg-white border-l border-slate-200 flex flex-col h-full overflow-y-auto">
-              <div className="p-4 border-b border-slate-100">
-                <h3 className="font-bold text-slate-800 mb-2 flex items-center gap-2">
-                  <Settings size={18} />
-                  Настройки этикетки
-                </h3>
-                <p className="text-xs text-slate-500 mb-4">
-                  Эти настройки применятся ко всем печатаемым этикеткам
-                </p>
-                <LabelSettings 
-                  template={template} 
-                  onChange={setTemplate} 
-                />
-              </div>
-              
-              <div className="p-4 flex-1 bg-slate-100 flex flex-col items-center justify-center min-h-[300px]">
-                <div className="text-xs text-slate-400 mb-2 uppercase font-bold tracking-wider">Предпросмотр</div>
-                <div className="bg-white shadow-lg" style={{ width: '58mm', height: '40mm' }}>
-                  <LabelPreview 
-                    template={template} 
-                    sampleData={{
-                      name: "ФУТБОЛКА ТРИКОТАЖНАЯ",
-                      gtin: "04600000000000",
-                      serial: "SAMPLE123",
-                      fullCode: "010460000000000021SAMPLE123"
-                    }} 
+            {/* Step 1: Upload */}
+            <Card className={items.length > 0 ? "border-green-200 bg-green-50/30" : ""}>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <span className="flex items-center justify-center w-6 h-6 rounded-full bg-slate-900 text-white text-xs">1</span>
+                  Upload Data
+                </CardTitle>
+                <CardDescription>Import XML file from Honest Sign / EDI</CardDescription>
+              </CardHeader>
+              <CardContent>
+                {items.length === 0 ? (
+                  <UploadArea 
+                    onFileSelect={handleFileSelect} 
+                    isProcessing={isProcessing}
+                    error={errors.length > 0 ? errors[0] : null}
                   />
-                </div>
-              </div>
-            </div>
+                ) : (
+                  <div className="flex items-center justify-between bg-white p-4 rounded-lg border border-green-200">
+                    <div>
+                      <p className="font-medium text-green-900">File Processed Successfully</p>
+                      <p className="text-sm text-green-700">{items.length} items found</p>
+                    </div>
+                    <Button variant="ghost" size="sm" onClick={reset} className="text-green-700 hover:text-green-900 hover:bg-green-100">
+                      Change File
+                    </Button>
+                  </div>
+                )}
+                
+                {errors.length > 0 && items.length > 0 && (
+                  <div className="mt-4 p-4 bg-yellow-50 border border-yellow-200 rounded-lg flex items-start gap-3">
+                    <AlertCircle className="text-yellow-600 shrink-0 mt-0.5" size={18} />
+                    <div className="text-sm text-yellow-800">
+                      <p className="font-medium">Warnings during parsing:</p>
+                      <ul className="list-disc list-inside mt-1 space-y-1">
+                        {errors.slice(0, 3).map((e, i) => <li key={i}>{e}</li>)}
+                        {errors.length > 3 && <li>...and {errors.length - 3} more</li>}
+                      </ul>
+                    </div>
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+
+            {/* Step 2: Template Selection */}
+            {items.length > 0 && (
+              <Card>
+                <CardHeader>
+                  <CardTitle className="flex items-center gap-2">
+                    <span className="flex items-center justify-center w-6 h-6 rounded-full bg-slate-900 text-white text-xs">2</span>
+                    Select Template
+                  </CardTitle>
+                  <CardDescription>Choose label size and layout</CardDescription>
+                </CardHeader>
+                <CardContent>
+                  <TemplateSelector 
+                    selectedId={selectedTemplate.id} 
+                    onSelect={setSelectedTemplate} 
+                  />
+                </CardContent>
+              </Card>
+            )}
+
+            {/* Product List */}
+            {items.length > 0 && (
+              <Card>
+                <CardHeader>
+                  <CardTitle>Items</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <ProductTable 
+                    items={items} 
+                    selectedIds={selectedIds}
+                    onSelectionChange={setSelectedIds}
+                  />
+                </CardContent>
+              </Card>
+            )}
           </div>
-        )}
-      </main>
+
+          {/* Right Column: Preview & Action */}
+          <div className="lg:col-span-1 space-y-6">
+            {items.length > 0 ? (
+              <div className="sticky top-8 space-y-6">
+                <Card className="border-slate-300 shadow-md">
+                  <CardHeader className="bg-slate-50 border-b border-slate-100 pb-4">
+                    <CardTitle className="text-lg">Preview</CardTitle>
+                  </CardHeader>
+                  <CardContent className="pt-6 flex justify-center bg-slate-100/50 min-h-[200px] items-center">
+                    {items[0] && (
+                      <LabelPreview item={items[0]} template={selectedTemplate} />
+                    )}
+                  </CardContent>
+                  <div className="p-4 border-t border-slate-100 bg-white rounded-b-lg space-y-3">
+                    <Button 
+                      className="w-full gap-2" 
+                      size="lg" 
+                      onClick={handlePrint}
+                      disabled={isGenerating || selectedIds.size === 0}
+                    >
+                      <Printer size={18} />
+                      {isGenerating ? 'Processing...' : `Print ${selectedIds.size} Labels`}
+                    </Button>
+                    <Button 
+                      variant="outline" 
+                      className="w-full gap-2" 
+                      onClick={handleGeneratePDF}
+                      disabled={isGenerating || selectedIds.size === 0}
+                    >
+                      <FileDown size={18} />
+                      Download PDF
+                    </Button>
+                    <p className="text-xs text-center text-slate-400 mt-2">
+                      Total {selectedIds.size} labels selected
+                    </p>
+                  </div>
+                </Card>
+              </div>
+            ) : (
+              <div className="hidden lg:block p-8 border-2 border-dashed border-slate-200 rounded-xl text-center text-slate-400">
+                <div className="mx-auto w-16 h-16 bg-slate-100 rounded-full flex items-center justify-center mb-4">
+                  <Printer size={24} className="opacity-50" />
+                </div>
+                <p>Upload a file to see preview and print options</p>
+              </div>
+            )}
+          </div>
+
+        </div>
+      </div>
     </div>
   );
 }

@@ -3,39 +3,27 @@ import { LabelTemplate, generateDataMatrixBase64 } from '@/lib/labelGenerator';
 import { ProductItem } from '@/lib/xmlParser';
 
 interface LabelPreviewProps {
-  item?: ProductItem | {
-    name: string;
-    gtin: string;
-    serial: string;
-    fullCode: string;
-    attributes?: any;
-  };
+  item: ProductItem;
   template: LabelTemplate;
-  sampleData?: any; // For backward compatibility or direct usage
 }
 
-export const LabelPreview: React.FC<LabelPreviewProps> = ({ item: propItem, template, sampleData }) => {
-  const item = propItem || sampleData;
+export const LabelPreview: React.FC<LabelPreviewProps> = ({ item, template }) => {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const [barcodeUrl, setBarcodeUrl] = React.useState<string | null>(null);
 
   useEffect(() => {
     let mounted = true;
-    if (item?.fullCode) {
+    if (item.fullCode) {
       generateDataMatrixBase64(item.fullCode).then(url => {
         if (mounted) setBarcodeUrl(url);
       }).catch(err => console.error(err));
     }
     return () => { mounted = false; };
-  }, [item?.fullCode]);
+  }, [item.fullCode]);
 
-  if (!item) return <div className="text-slate-400 text-sm">Нет данных для предпросмотра</div>;
-
-  // Extract attributes if available, or use defaults/placeholders
-  const color = item.attributes?.color || "РАЗНОЦВЕТНЫЙ";
-  const composition = item.attributes?.composition || "100% х/б";
-  const name = item.name || "ТОВАР";
-
+  // Calculate scale to fit in the container, but keep aspect ratio
+  // We'll render it using CSS mm units
+  
   return (
     <div className="flex flex-col items-center gap-2">
       <div 
@@ -71,18 +59,18 @@ export const LabelPreview: React.FC<LabelPreviewProps> = ({ item: propItem, temp
                 
                 {/* Product Info */}
                 <div className="font-bold text-[10pt] uppercase leading-tight mb-2 break-words">
-                  {name}
+                  ФУТБОЛКА<br/>ТРИКОТАЖНАЯ
                 </div>
               </div>
 
               <div className="flex flex-col gap-1 pb-1">
                 <div className="text-[7pt] leading-tight truncate">
                   <span className="text-slate-500">Цвет: </span>
-                  <span className="font-bold">{color}</span>
+                  <span className="font-bold">РАЗНОЦВЕТНЫЙ</span>
                 </div>
                 <div className="text-[7pt] leading-tight truncate">
                   <span className="text-slate-500">Состав: </span>
-                  <span className="font-bold">{composition}</span>
+                  <span className="font-bold">100% х/б</span>
                 </div>
               </div>
             </div>
