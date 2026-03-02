@@ -84,6 +84,7 @@ export const ProductTable: React.FC<ProductTableProps> = ({ items, selectedIds, 
               <th className="px-4 py-3">Product Name</th>
               <th className="px-4 py-3 w-32">GTIN</th>
               <th className="px-4 py-3 w-32">Serial</th>
+              <th className="px-4 py-3 w-24 text-center">Status</th>
               <th className="px-4 py-3 w-24 text-center">Valid</th>
             </tr>
           </thead>
@@ -108,6 +109,17 @@ export const ProductTable: React.FC<ProductTableProps> = ({ items, selectedIds, 
                 <td className="px-4 py-3 font-mono text-slate-600">{item.gtin || '-'}</td>
                 <td className="px-4 py-3 font-mono text-slate-600 truncate max-w-[150px]" title={item.serial}>
                   {item.serial || '-'}
+                </td>
+                <td className="px-4 py-3 text-center">
+                  {item.isPrinted ? (
+                    <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-gray-100 text-gray-800">
+                      Printed
+                    </span>
+                  ) : (
+                    <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-blue-50 text-blue-700">
+                      New
+                    </span>
+                  )}
                 </td>
                 <td className="px-4 py-3 text-center">
                   {item.fullCode ? (

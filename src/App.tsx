@@ -7,7 +7,8 @@ import { Button } from './components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from './components/ui/card';
 import { parseXML, ProductItem } from './lib/xmlParser';
 import { generatePDF, DEFAULT_TEMPLATES, LabelTemplate } from './lib/labelGenerator';
-import { Printer, FileDown, RefreshCw, AlertCircle } from 'lucide-react';
+import { checkPrintedCodes, createPrintSession, recordPrintedCodes } from './lib/db';
+import { Printer, FileDown, RefreshCw, AlertCircle, Database } from 'lucide-react';
 
 function App() {
   const [items, setItems] = useState<ProductItem[]>([]);
@@ -16,6 +17,7 @@ function App() {
   const [isProcessing, setIsProcessing] = useState(false);
   const [selectedTemplate, setSelectedTemplate] = useState<LabelTemplate>(DEFAULT_TEMPLATES[0]);
   const [isGenerating, setIsGenerating] = useState(false);
+  const [isCheckingDb, setIsCheckingDb] = useState(false);
 
   const handleFileSelect = async (file: File) => {
     setIsProcessing(true);
@@ -28,10 +30,32 @@ function App() {
       const text = e.target?.result as string;
       if (text) {
         const result = parseXML(text);
-        setItems(result.items);
-        setErrors(result.errors);
-        // Default select all? Or none? Let's select all for convenience
-        setSelectedIds(new Set(result.items.map(i => i.id)));
+        let parsedItems = result.items;
+        
+        // Check DB for printed codes
+        setIsCheckingDb(true);
+        try {
+          const printedSet = await checkPrintedCodes(parsedItems);
+          parsedItems = parsedItems.map(item => ({
+            ...item,
+            isPrinted: printedSet.has(item.fullCode)
+          }));
+        } catch (err) {
+          console.error("DB Check failed", err);
+          setErrors(prev => [...prev, "Failed to check printed status from database"]);
+        } finally {
+          setIsCheckingDb(false);
+        }
+
+        setItems(parsedItems);
+        setErrors(prev => [...prev, ...result.errors]);
+        
+        // Select only NOT printed items by default
+        const newIds = parsedItems
+            .filter(i => !i.isPrinted)
+            .map(i => i.id);
+        
+        setSelectedIds(new Set(newIds));
       }
       setIsProcessing(false);
     };
@@ -54,11 +78,24 @@ function App() {
     }
     setIsGenerating(true);
     try {
+      // 1. Create Session
+      const sessionId = await createPrintSession("PDF Download");
+      
+      // 2. Record Codes
+      await recordPrintedCodes(selectedItems, sessionId);
+
+      // 3. Generate PDF
       const pdf = await generatePDF(selectedItems, selectedTemplate);
       pdf.download(`labels-${new Date().toISOString().split('T')[0]}.pdf`);
+
+      // 4. Update local state
+      setItems(prev => prev.map(item => 
+        selectedIds.has(item.id) ? { ...item, isPrinted: true } : item
+      ));
+
     } catch (e) {
       console.error(e);
-      alert("Error generating PDF");
+      alert("Error generating PDF or saving to DB");
     } finally {
       setIsGenerating(false);
     }
@@ -72,11 +109,24 @@ function App() {
     }
     setIsGenerating(true);
     try {
+      // 1. Create Session
+      const sessionId = await createPrintSession("Direct Print");
+
+      // 2. Record Codes
+      await recordPrintedCodes(selectedItems, sessionId);
+
+      // 3. Print
       const pdf = await generatePDF(selectedItems, selectedTemplate);
       pdf.print();
+
+      // 4. Update local state
+      setItems(prev => prev.map(item => 
+        selectedIds.has(item.id) ? { ...item, isPrinted: true } : item
+      ));
+
     } catch (e) {
       console.error(e);
-      alert("Error preparing print");
+      alert("Error preparing print or saving to DB");
     } finally {
       setIsGenerating(false);
     }
@@ -185,7 +235,16 @@ function App() {
                   <div className="flex items-center justify-between bg-white p-4 rounded-lg border border-green-200">
                     <div>
                       <p className="font-medium text-green-900">File Processed Successfully</p>
-                      <p className="text-sm text-green-700">{items.length} items found</p>
+                      <p className="text-sm text-green-700">
+                        {items.length} items found 
+                        {isCheckingDb ? (
+                          <span className="ml-2 text-slate-500 animate-pulse">Checking database...</span>
+                        ) : (
+                          <span className="ml-2 text-slate-500">
+                            ({items.filter(i => i.isPrinted).length} already printed)
+                          </span>
+                        )}
+                      </p>
                     </div>
                     <Button variant="ghost" size="sm" onClick={reset} className="text-green-700 hover:text-green-900 hover:bg-green-100">
                       Change File

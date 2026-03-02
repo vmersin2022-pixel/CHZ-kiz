@@ -27,27 +27,7 @@ export const parseXML = (xmlContent: string): ParseResult => {
   try {
     const jsonObj = parser.parse(xmlContent);
     
-    // Attempt to find the document root. Common root is 'File' -> 'Document' -> 'Table'
-    // But structure varies greatly. We'll search recursively for product nodes or specific tags.
-    
-    // Strategy: Flatten the object and look for arrays of products or specific keys like 'KIZ', 'NaimTov'
-    // For this demo, we'll implement a heuristic for standard UPD (Universal Transfer Document) format.
-    
-    // Standard UPD structure often has: Файл -> Документ -> ТаблСчФакт -> СведТов
-    // In English transliteration: File -> Dokument -> TablSchFakt -> SvedTov
-    
-    let documentNode = jsonObj?.File?.Dokument;
-    if (!documentNode) {
-       // Try finding any node that looks like a document root
-       const keys = Object.keys(jsonObj);
-       if (keys.length > 0) documentNode = jsonObj[keys[0]];
-    }
-
-    if (!documentNode) {
-      return { items: [], errors: ["Could not find document root"] };
-    }
-
-    // Helper to find all nodes with a specific key
+    // Helper to find all nodes with a specific key recursively
     const findNodes = (obj: any, key: string): any[] => {
       let results: any[] = [];
       if (!obj) return results;
@@ -72,6 +52,7 @@ export const parseXML = (xmlContent: string): ParseResult => {
     };
 
     // Look for 'SvedTov' (Product Info) or similar
+    // In the provided file: <СведТов ...>
     let productNodes = findNodes(jsonObj, 'SvedTov');
     if (productNodes.length === 0) productNodes = findNodes(jsonObj, 'СведТов');
     
@@ -84,14 +65,25 @@ export const parseXML = (xmlContent: string): ParseResult => {
     }
 
     if (productNodes.length === 0) {
-        return { items: [], errors: ["No product nodes found (SvedTov/Tov/СведТов/Тов)"] };
+        return { items: [], errors: ["Не найдена информация о товарах (теги СведТов/Tov/СведТов/Тов)"] };
     }
 
     productNodes.forEach((node: any, index: number) => {
       try {
-        const name = node.NaimTov || node.Naim || node.НаимТов || node.Наим || `Product ${index + 1}`;
-        const quantity = parseFloat(node.KolTov || node.Kol || node.КолТов || node.Кол || "1");
+        // Attributes are prefixed with @_
+        const name = node['@_НаимТов'] || node['@_NaimTov'] || node.NaimTov || node.Naim || node.НаимТов || node.Наим || `Товар ${index + 1}`;
+        const quantityStr = node['@_КолТов'] || node['@_KolTov'] || node.KolTov || node.Kol || node.КолТов || node.Кол || "1";
+        const quantity = parseFloat(quantityStr);
         
+        // Try to find GTIN in attributes of ДопСведТов (DopSvedTov)
+        // Structure: <СведТов ...> <ДопСведТов КодТов="..."> ... </ДопСведТов> </СведТов>
+        let gtinFromAttr = "";
+        if (node.ДопСведТов && node.ДопСведТов['@_КодТов']) {
+            gtinFromAttr = node.ДопСведТов['@_КодТов'];
+        } else if (node.DopSvedTov && node.DopSvedTov['@_KodTov']) {
+            gtinFromAttr = node.DopSvedTov['@_KodTov'];
+        }
+
         // Identification codes are usually in 'InfPolFKhZh2' or 'NomSredIdentTov'
         // We need to find the 'KIZ' (Control Identification Sign) or similar.
         
@@ -103,20 +95,20 @@ export const parseXML = (xmlContent: string): ParseResult => {
                 // Check for KIZ (CIS) - usually base64 or hex, but here likely plain string in XML
                 // Or KIGTIN + KISer
                 
-                let code = "";
-                let gtin = "";
-                let serial = "";
-                
                 // Case 1: KIZ (Full code)
                 const kizValue = ident.KIZ || ident.КИЗ;
                 if (kizValue) {
                     // Sometimes KIZ is a list
                     const kizList = Array.isArray(kizValue) ? kizValue : [kizValue];
                     kizList.forEach((k: string) => {
+                        // If GTIN wasn't found in attributes, try to extract from code
+                        const extractedGtin = extractGTIN(k);
+                        const finalGtin = gtinFromAttr || extractedGtin;
+
                         items.push({
                             id: crypto.randomUUID(),
                             name,
-                            gtin: extractGTIN(k),
+                            gtin: finalGtin,
                             serial: extractSerial(k),
                             fullCode: k,
                             quantity: 1, // Usually KIZ is unique per item
@@ -131,12 +123,10 @@ export const parseXML = (xmlContent: string): ParseResult => {
                 const serialValue = ident.KISer || ident.КИСер;
 
                 if (gtinValue && serialValue) {
-                     gtin = gtinValue;
-                     serial = serialValue;
+                     const gtin = gtinValue;
+                     const serial = serialValue;
                      // Construct GS1 string: 01 + GTIN + 21 + Serial
-                     // Note: This is a simplification. Real GS1 has separators.
-                     // We will format it properly in the generator.
-                     code = `01${gtin}21${serial}`; 
+                     const code = `01${gtin}21${serial}`; 
                      
                      items.push({
                         id: crypto.randomUUID(),
@@ -169,30 +159,60 @@ export const parseXML = (xmlContent: string): ParseResult => {
   return { items, errors };
 };
 
-// Helpers to extract GTIN/Serial from a full GS1 DataMatrix string if possible
+// Helpers to extract GTIN/Serial from a full GS1 DataMatrix string
 // Standard format: (01)GTIN(21)SERIAL(91)KEY(92)CRYPTO
-// Often in XML it's just the plain string without brackets, but with GS separators (ASCII 29)
+// The input string might contain brackets or might be plain numbers/chars.
+// It might also contain special characters like <GS> (ASCII 29) as separators.
+
 function extractGTIN(code: string): string {
-    // Simple heuristic: if starts with 01, take next 14 chars
-    if (code.startsWith('01') && code.length >= 16) {
-        return code.substring(2, 16);
+    // Remove brackets if present (e.g. (01)...)
+    const cleanCode = code.replace(/\(01\)/, '01');
+    
+    if (cleanCode.startsWith('01') && cleanCode.length >= 16) {
+        return cleanCode.substring(2, 16);
     }
     return "";
 }
 
 function extractSerial(code: string): string {
-    // Heuristic: look for '21' after GTIN
-    if (code.startsWith('01') && code.length > 18) {
-        const afterGtin = code.substring(16);
-        if (afterGtin.startsWith('21')) {
-            // Serial is variable length, ends with GS (0x1D) or end of string
-            // or next AI (91 or 92). 
-            // This is tricky without a full GS1 parser.
-            // We'll take up to 13 chars or until a known separator.
-            let serial = afterGtin.substring(2);
-            // Check for common separators or next AIs if we can guess them
-            // For now, return the rest or a chunk
-            return serial.split(String.fromCharCode(29))[0].substring(0, 13); 
+    // Remove brackets if present
+    let cleanCode = code.replace(/\(01\)/, '01').replace(/\(21\)/, '21');
+    
+    // Find the position of '21' after the GTIN (which is at index 2, length 14 -> ends at 16)
+    // So '21' should be at index 16.
+    if (cleanCode.startsWith('01') && cleanCode.length > 18) {
+        // Verify '21' AI is present
+        if (cleanCode.substring(16, 18) === '21') {
+            const afterAI21 = cleanCode.substring(18);
+            
+            // Serial ends at the first GS (Group Separator, \u001D) 
+            // OR at the next AI (91 or 93 etc) if no GS is used.
+            
+            // Try to split by GS (ASCII 29)
+            const parts = afterAI21.split(String.fromCharCode(29));
+            if (parts.length > 1) {
+                return parts[0];
+            }
+            
+            // Try to split by FNC1 (ASCII 232) - sometimes used
+            const partsFnc1 = afterAI21.split(String.fromCharCode(232));
+            if (partsFnc1.length > 1) {
+                return partsFnc1[0];
+            }
+
+            // If no separator, for "Light Industry" (clothes), Serial is typically 13 chars.
+            // For Shoes, it's also 13 chars.
+            // For Tobacco, it's 7 chars.
+            // We can try to guess based on length or common patterns.
+            // Given the user's file is clothes (T-shirts), 13 is the standard.
+            
+            // If the string is long enough, take 13 chars.
+            if (afterAI21.length >= 13) {
+                 return afterAI21.substring(0, 13);
+            }
+            
+            // Fallback: return everything if short
+            return afterAI21;
         }
     }
     return "";

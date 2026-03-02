@@ -75,6 +75,8 @@ export const DEFAULT_TEMPLATES: LabelTemplate[] = [
   },
 ];
 
+export const defaultTemplate = DEFAULT_TEMPLATES[0];
+
 export const generateDataMatrixBase64 = async (text: string): Promise<string> => {
   return new Promise((resolve, reject) => {
     const canvas = document.createElement('canvas');
@@ -182,7 +184,6 @@ export const generatePDF = async (items: ProductItem[], template: LabelTemplate)
               // Right Column: DataMatrix
               width: dmSizePt,
               image: imgData,
-              width: dmSizePt,
               height: dmSizePt,
               alignment: 'right',
               margin: [0, (heightPt - dmSizePt) / 2 - 2, 0, 0] // Vertically center
