@@ -1,0 +1,5 @@
+{
+  "name": "LabelWizard - Honest Sign",
+  "description": "A tool to parse Honest Sign XML documents, extract DataMatrix codes, and generate printable labels.",
+  "requestFramePermissions": []
+}
