@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import { supabase, PrintSession } from '../lib/supabase';
+import { getSessions } from '../lib/db';
+import { PrintSession } from '../lib/supabase';
 import { Upload, FileText, ArrowRight, Loader2 } from 'lucide-react';
 
 interface SessionListProps {
@@ -17,12 +18,7 @@ export const SessionList: React.FC<SessionListProps> = ({ onSelectSession, onNew
 
   const fetchSessions = async () => {
     try {
-      const { data, error } = await supabase
-        .from('print_sessions')
-        .select('*')
-        .order('created_at', { ascending: false });
-      
-      if (error) throw error;
+      const data = await getSessions();
       setSessions(data || []);
     } catch (err) {
       console.error('Error fetching sessions:', err);

@@ -1,10 +1,21 @@
 import { supabase } from './supabase';
 import { parseXML } from './xmlParser';
+import { 
+  uploadSessionLocal, 
+  getSessionsLocal, 
+  getGtinGroupsLocal, 
+  fetchCodesForPrintingLocal, 
+  markCodesAsPrintedLocal 
+} from './db-local';
 
 export async function uploadSession(file: File, xmlContent: string) {
   const codes = parseXML(xmlContent);
   if (codes.length === 0) {
     throw new Error('No codes found in XML');
+  }
+
+  if (!supabase) {
+    return uploadSessionLocal(file, codes);
   }
 
   // 1. Create Session
@@ -29,8 +40,6 @@ export async function uploadSession(file: File, xmlContent: string) {
     chunks.push(codes.slice(i, i + BATCH_SIZE));
   }
 
-  let insertedCount = 0;
-
   for (const chunk of chunks) {
     const rows = chunk.map(code => ({
       session_id: session.id,
@@ -52,8 +61,6 @@ export async function uploadSession(file: File, xmlContent: string) {
     if (codesError) {
       console.error('Error inserting batch', codesError);
       // Optional: Handle partial failure or retry
-    } else {
-      insertedCount += rows.length;
     }
   }
 
@@ -61,6 +68,10 @@ export async function uploadSession(file: File, xmlContent: string) {
 }
 
 export async function getSessions() {
+  if (!supabase) {
+    return getSessionsLocal();
+  }
+
   const { data, error } = await supabase
     .from('print_sessions')
     .select('*')
@@ -71,6 +82,10 @@ export async function getSessions() {
 }
 
 export async function getGtinGroups(sessionId: string) {
+  if (!supabase) {
+    return getGtinGroupsLocal(sessionId);
+  }
+
   // Supabase doesn't support "GROUP BY" easily in the JS client for counting 
   // without using .rpc() or raw SQL, but we can fetch counts using separate queries 
   // or fetch all distinct GTINs first.
@@ -116,6 +131,10 @@ export async function getGtinGroups(sessionId: string) {
 }
 
 export async function fetchCodesForPrinting(sessionId: string, gtin: string, limit: number) {
+  if (!supabase) {
+    return fetchCodesForPrintingLocal(sessionId, gtin, limit);
+  }
+
   const { data, error } = await supabase
     .from('print_codes')
     .select('*')
@@ -129,6 +148,10 @@ export async function fetchCodesForPrinting(sessionId: string, gtin: string, lim
 }
 
 export async function markCodesAsPrinted(ids: string[]) {
+  if (!supabase) {
+    return markCodesAsPrintedLocal(ids);
+  }
+
   const { error } = await supabase
     .from('print_codes')
     .update({ 
