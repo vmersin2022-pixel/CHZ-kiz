@@ -33,18 +33,14 @@ export async function checkPrintedCodes(items: ProductItem[]): Promise<Set<strin
   return printedCodes;
 }
 
-export async function createPrintSession(fileName: string): Promise<string | null> {
-  // Try to create a session. We assume 'print_sessions' has an 'id' that is generated automatically.
-  // We'll try to pass a timestamp or just an empty object if possible, 
-  // but usually passing a known field like 'created_at' or a metadata field is safer if it exists.
-  // Since we don't know the exact schema of print_sessions other than ID, 
-  // we will try to insert a default row. 
-  // If there's a 'name' or 'file_name' column, it would be good to use it.
-  
-  // Strategy: Try to insert with no data (relying on defaults) and get ID.
+export async function createPrintSession(fileName: string, totalCodes: number): Promise<string | null> {
   const { data, error } = await supabase
     .from('print_sessions')
-    .insert({}) // Inserting empty object to trigger defaults
+    .insert({
+      filename: fileName,
+      total_codes: totalCodes,
+      notes: `Imported on ${new Date().toLocaleString()}`
+    })
     .select('id')
     .single();
 
@@ -66,15 +62,20 @@ export async function recordPrintedCodes(items: ProductItem[], sessionId: string
     product_name: item.name,
     is_printed: true,
     printed_at: new Date().toISOString(),
-    session_id: sessionId // Can be null if session creation failed, but better to have it
+    session_id: sessionId
   }));
 
-  const { error } = await supabase
-    .from('print_codes')
-    .upsert(rows, { onConflict: 'full_code' }); // Upsert to avoid duplicates if code exists
+  // Chunking to prevent request size limits
+  const chunkSize = 500;
+  for (let i = 0; i < rows.length; i += chunkSize) {
+    const chunk = rows.slice(i, i + chunkSize);
+    const { error } = await supabase
+      .from('print_codes')
+      .upsert(chunk, { onConflict: 'full_code' });
 
-  if (error) {
-    console.error('Error recording printed codes:', error);
-    throw error;
+    if (error) {
+      console.error(`Error recording chunk ${i}-${i+chunkSize}:`, error);
+      // We continue trying to save other chunks even if one fails
+    }
   }
 }

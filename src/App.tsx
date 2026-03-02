@@ -19,11 +19,14 @@ function App() {
   const [isGenerating, setIsGenerating] = useState(false);
   const [isCheckingDb, setIsCheckingDb] = useState(false);
 
+  const [currentFileName, setCurrentFileName] = useState<string>("");
+
   const handleFileSelect = async (file: File) => {
     setIsProcessing(true);
     setErrors([]);
     setItems([]);
     setSelectedIds(new Set());
+    setCurrentFileName(file.name);
 
     const reader = new FileReader();
     reader.onload = async (e) => {
@@ -79,7 +82,7 @@ function App() {
     setIsGenerating(true);
     try {
       // 1. Create Session
-      const sessionId = await createPrintSession("PDF Download");
+      const sessionId = await createPrintSession(currentFileName || "PDF Download", selectedItems.length);
       
       // 2. Record Codes
       await recordPrintedCodes(selectedItems, sessionId);
@@ -110,7 +113,7 @@ function App() {
     setIsGenerating(true);
     try {
       // 1. Create Session
-      const sessionId = await createPrintSession("Direct Print");
+      const sessionId = await createPrintSession(currentFileName || "Direct Print", selectedItems.length);
 
       // 2. Record Codes
       await recordPrintedCodes(selectedItems, sessionId);
