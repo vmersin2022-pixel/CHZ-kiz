@@ -6,28 +6,25 @@ export async function checkPrintedCodes(items: ProductItem[]): Promise<Set<strin
 
   const codes = items.map(i => i.fullCode).filter(Boolean);
   
-  // Supabase allows 'in' query for arrays
-  // We chunk it just in case there are too many items
+  // Use the RPC function for reliable checking (handles special chars better)
+  // Chunking is still good practice for large arrays
   const printedCodes = new Set<string>();
-  // Reduced chunk size to 50 to avoid 400 Bad Request (URL too long)
-  const chunkSize = 50;
+  const chunkSize = 200; // RPC can handle larger chunks
 
   for (let i = 0; i < codes.length; i += chunkSize) {
     const chunk = codes.slice(i, i + chunkSize);
     
     const { data, error } = await supabase
-      .from('print_codes')
-      .select('full_code')
-      .in('full_code', chunk)
-      .eq('is_printed', true);
+      .rpc('check_printed_codes', { codes: chunk });
 
     if (error) {
-      console.error('Error checking printed codes:', error);
+      console.error('Error checking printed codes via RPC:', error);
       continue;
     }
 
     if (data) {
-      data.forEach((row: any) => printedCodes.add(row.full_code));
+      // data is an array of strings (full_code)
+      data.forEach((code: string) => printedCodes.add(code));
     }
   }
 
