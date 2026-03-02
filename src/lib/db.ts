@@ -9,7 +9,8 @@ export async function checkPrintedCodes(items: ProductItem[]): Promise<Set<strin
   // Supabase allows 'in' query for arrays
   // We chunk it just in case there are too many items
   const printedCodes = new Set<string>();
-  const chunkSize = 1000;
+  // Reduced chunk size to 50 to avoid 400 Bad Request (URL too long)
+  const chunkSize = 50;
 
   for (let i = 0; i < codes.length; i += chunkSize) {
     const chunk = codes.slice(i, i + chunkSize);
