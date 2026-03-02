@@ -39,7 +39,7 @@ export interface LabelTemplate {
 export const DEFAULT_TEMPLATES: LabelTemplate[] = [
   {
     id: '58x40',
-    name: 'Standard 58x40mm (Side-by-Side)',
+    name: 'Стандарт 58x40мм (Две колонки)',
     width: 58,
     height: 40,
     fontSize: 7,
@@ -51,7 +51,7 @@ export const DEFAULT_TEMPLATES: LabelTemplate[] = [
   },
   {
     id: '43x25',
-    name: 'Small 43x25mm',
+    name: 'Маленький 43x25мм',
     width: 43,
     height: 25,
     fontSize: 6,
@@ -63,7 +63,7 @@ export const DEFAULT_TEMPLATES: LabelTemplate[] = [
   },
   {
     id: '30x20',
-    name: 'Tiny 30x20mm',
+    name: 'Мини 30x20мм',
     width: 30,
     height: 20,
     fontSize: 5,
@@ -74,8 +74,6 @@ export const DEFAULT_TEMPLATES: LabelTemplate[] = [
     layout: 'simple',
   },
 ];
-
-export const defaultTemplate = DEFAULT_TEMPLATES[0];
 
 export const generateDataMatrixBase64 = async (text: string): Promise<string> => {
   return new Promise((resolve, reject) => {
@@ -182,8 +180,8 @@ export const generatePDF = async (items: ProductItem[], template: LabelTemplate)
             },
             {
               // Right Column: DataMatrix
-              width: dmSizePt,
               image: imgData,
+              width: dmSizePt,
               height: dmSizePt,
               alignment: 'right',
               margin: [0, (heightPt - dmSizePt) / 2 - 2, 0, 0] // Vertically center
@@ -238,7 +236,7 @@ export const generatePDF = async (items: ProductItem[], template: LabelTemplate)
 
   const docDefinition = {
     pageSize: { width: widthPt, height: heightPt },
-    pageMargins: [2, 2, 2, 2], // Small margins
+    pageMargins: [2, 2, 2, 2] as [number, number, number, number], // Small margins
     content: content,
     defaultStyle: {
       font: 'Roboto'

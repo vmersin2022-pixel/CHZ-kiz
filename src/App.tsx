@@ -18,6 +18,7 @@ function App() {
   const [selectedTemplate, setSelectedTemplate] = useState<LabelTemplate>(DEFAULT_TEMPLATES[0]);
   const [isGenerating, setIsGenerating] = useState(false);
   const [isCheckingDb, setIsCheckingDb] = useState(false);
+  const [batchSize, setBatchSize] = useState<number>(200);
 
   const [currentFileName, setCurrentFileName] = useState<string>("");
 
@@ -45,7 +46,7 @@ function App() {
           }));
         } catch (err) {
           console.error("DB Check failed", err);
-          setErrors(prev => [...prev, "Failed to check printed status from database"]);
+          setErrors(prev => [...prev, "Не удалось проверить статус печати в базе данных"]);
         } finally {
           setIsCheckingDb(false);
         }
@@ -63,10 +64,17 @@ function App() {
       setIsProcessing(false);
     };
     reader.onerror = () => {
-      setErrors(["Failed to read file"]);
+      setErrors(["Не удалось прочитать файл"]);
       setIsProcessing(false);
     };
     reader.readAsText(file);
+  };
+
+  const handleSelectBatch = () => {
+    const unprintedItems = items.filter(item => !item.isPrinted);
+    const toSelect = unprintedItems.slice(0, batchSize);
+    const newSelected = new Set(toSelect.map(item => item.id));
+    setSelectedIds(newSelected);
   };
 
   const getSelectedItems = () => {
@@ -76,7 +84,7 @@ function App() {
   const handleGeneratePDF = async () => {
     const selectedItems = getSelectedItems();
     if (selectedItems.length === 0) {
-        alert("Please select at least one item");
+        alert("Пожалуйста, выберите хотя бы один товар");
         return;
     }
     setIsGenerating(true);
@@ -98,7 +106,7 @@ function App() {
 
     } catch (e) {
       console.error(e);
-      alert("Error generating PDF or saving to DB");
+      alert("Ошибка при создании PDF или сохранении в БД");
     } finally {
       setIsGenerating(false);
     }
@@ -107,7 +115,7 @@ function App() {
   const handlePrint = async () => {
     const selectedItems = getSelectedItems();
     if (selectedItems.length === 0) {
-        alert("Please select at least one item");
+        alert("Пожалуйста, выберите хотя бы один товар");
         return;
     }
     setIsGenerating(true);
@@ -129,7 +137,7 @@ function App() {
 
     } catch (e) {
       console.error(e);
-      alert("Error preparing print or saving to DB");
+      alert("Ошибка при подготовке печати или сохранении в БД");
     } finally {
       setIsGenerating(false);
     }
@@ -195,18 +203,18 @@ function App() {
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
           <div>
             <h1 className="text-3xl font-bold tracking-tight text-slate-900">LabelWizard</h1>
-            <p className="text-slate-500">Honest Sign XML Parser & Label Generator</p>
+            <p className="text-slate-500">Генератор этикеток Честный Знак из XML</p>
           </div>
           <div className="flex gap-2">
             {items.length === 0 && (
                 <Button variant="secondary" onClick={handleLoadSample}>
-                    Load Sample Data
+                    Загрузить пример
                 </Button>
             )}
             {items.length > 0 && (
                 <Button variant="outline" onClick={reset} className="gap-2">
                 <RefreshCw size={16} />
-                Start Over
+                Начать заново
                 </Button>
             )}
           </div>
@@ -223,9 +231,9 @@ function App() {
               <CardHeader>
                 <CardTitle className="flex items-center gap-2">
                   <span className="flex items-center justify-center w-6 h-6 rounded-full bg-slate-900 text-white text-xs">1</span>
-                  Upload Data
+                  Загрузка данных
                 </CardTitle>
-                <CardDescription>Import XML file from Honest Sign / EDI</CardDescription>
+                <CardDescription>Импорт XML файла из Честного Знака / ЭДО</CardDescription>
               </CardHeader>
               <CardContent>
                 {items.length === 0 ? (
@@ -237,20 +245,20 @@ function App() {
                 ) : (
                   <div className="flex items-center justify-between bg-white p-4 rounded-lg border border-green-200">
                     <div>
-                      <p className="font-medium text-green-900">File Processed Successfully</p>
+                      <p className="font-medium text-green-900">Файл успешно обработан</p>
                       <p className="text-sm text-green-700">
-                        {items.length} items found 
+                        {items.length} товаров найдено 
                         {isCheckingDb ? (
-                          <span className="ml-2 text-slate-500 animate-pulse">Checking database...</span>
+                          <span className="ml-2 text-slate-500 animate-pulse">Проверка базы данных...</span>
                         ) : (
                           <span className="ml-2 text-slate-500">
-                            ({items.filter(i => i.isPrinted).length} already printed)
+                            ({items.filter(i => i.isPrinted).length} уже напечатано)
                           </span>
                         )}
                       </p>
                     </div>
                     <Button variant="ghost" size="sm" onClick={reset} className="text-green-700 hover:text-green-900 hover:bg-green-100">
-                      Change File
+                      Изменить файл
                     </Button>
                   </div>
                 )}
@@ -259,10 +267,10 @@ function App() {
                   <div className="mt-4 p-4 bg-yellow-50 border border-yellow-200 rounded-lg flex items-start gap-3">
                     <AlertCircle className="text-yellow-600 shrink-0 mt-0.5" size={18} />
                     <div className="text-sm text-yellow-800">
-                      <p className="font-medium">Warnings during parsing:</p>
+                      <p className="font-medium">Предупреждения при обработке:</p>
                       <ul className="list-disc list-inside mt-1 space-y-1">
                         {errors.slice(0, 3).map((e, i) => <li key={i}>{e}</li>)}
-                        {errors.length > 3 && <li>...and {errors.length - 3} more</li>}
+                        {errors.length > 3 && <li>...и еще {errors.length - 3}</li>}
                       </ul>
                     </div>
                   </div>
@@ -276,9 +284,9 @@ function App() {
                 <CardHeader>
                   <CardTitle className="flex items-center gap-2">
                     <span className="flex items-center justify-center w-6 h-6 rounded-full bg-slate-900 text-white text-xs">2</span>
-                    Select Template
+                    Выбор шаблона
                   </CardTitle>
-                  <CardDescription>Choose label size and layout</CardDescription>
+                  <CardDescription>Выберите размер и формат этикетки</CardDescription>
                 </CardHeader>
                 <CardContent>
                   <TemplateSelector 
@@ -292,8 +300,21 @@ function App() {
             {/* Product List */}
             {items.length > 0 && (
               <Card>
-                <CardHeader>
-                  <CardTitle>Items</CardTitle>
+                <CardHeader className="flex flex-row items-center justify-between">
+                  <CardTitle>Товары</CardTitle>
+                  <div className="flex items-center gap-2">
+                    <span className="text-sm text-slate-500">Выбрать первые:</span>
+                    <input 
+                      type="number" 
+                      min="1"
+                      value={batchSize}
+                      onChange={(e) => setBatchSize(parseInt(e.target.value) || 0)}
+                      className="w-20 px-2 py-1 text-sm border rounded-md"
+                    />
+                    <Button size="sm" variant="secondary" onClick={handleSelectBatch}>
+                      Выбрать
+                    </Button>
+                  </div>
                 </CardHeader>
                 <CardContent>
                   <ProductTable 
@@ -312,7 +333,7 @@ function App() {
               <div className="sticky top-8 space-y-6">
                 <Card className="border-slate-300 shadow-md">
                   <CardHeader className="bg-slate-50 border-b border-slate-100 pb-4">
-                    <CardTitle className="text-lg">Preview</CardTitle>
+                    <CardTitle className="text-lg">Предпросмотр</CardTitle>
                   </CardHeader>
                   <CardContent className="pt-6 flex justify-center bg-slate-100/50 min-h-[200px] items-center">
                     {items[0] && (
@@ -327,7 +348,7 @@ function App() {
                       disabled={isGenerating || selectedIds.size === 0}
                     >
                       <Printer size={18} />
-                      {isGenerating ? 'Processing...' : `Print ${selectedIds.size} Labels`}
+                      {isGenerating ? 'Обработка...' : `Печать ${selectedIds.size} этикеток`}
                     </Button>
                     <Button 
                       variant="outline" 
@@ -336,10 +357,10 @@ function App() {
                       disabled={isGenerating || selectedIds.size === 0}
                     >
                       <FileDown size={18} />
-                      Download PDF
+                      Скачать PDF
                     </Button>
                     <p className="text-xs text-center text-slate-400 mt-2">
-                      Total {selectedIds.size} labels selected
+                      Всего выбрано {selectedIds.size} этикеток
                     </p>
                   </div>
                 </Card>
@@ -349,7 +370,7 @@ function App() {
                 <div className="mx-auto w-16 h-16 bg-slate-100 rounded-full flex items-center justify-center mb-4">
                   <Printer size={24} className="opacity-50" />
                 </div>
-                <p>Upload a file to see preview and print options</p>
+                <p>Загрузите файл для предпросмотра и печати</p>
               </div>
             )}
           </div>

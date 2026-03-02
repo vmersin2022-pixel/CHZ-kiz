@@ -119,7 +119,7 @@ export const LabelPreview: React.FC<LabelPreviewProps> = ({ item, template }) =>
           </div>
         )}
       </div>
-      <span className="text-xs text-slate-400">Preview (Scaled)</span>
+      <span className="text-xs text-slate-400">Предпросмотр (Масштабировано)</span>
     </div>
   );
 };

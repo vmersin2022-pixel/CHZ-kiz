@@ -58,14 +58,14 @@ export const ProductTable: React.FC<ProductTableProps> = ({ items, selectedIds, 
       <div className="p-4 border-b border-slate-200 bg-slate-50 flex flex-wrap gap-4 justify-between items-center">
         <div className="flex gap-2">
             <Button variant="outline" size="sm" onClick={handleSelectAll}>
-                {selectedIds.size === items.length ? "Deselect All" : "Select All"}
+                {selectedIds.size === items.length ? "Снять все" : "Выбрать все"}
             </Button>
             <Button variant="outline" size="sm" onClick={handleSelectPage}>
-                {currentItems.every(i => selectedIds.has(i.id)) ? "Deselect Page" : "Select Page"}
+                {currentItems.every(i => selectedIds.has(i.id)) ? "Снять со страницы" : "Выбрать страницу"}
             </Button>
         </div>
         <div className="text-sm text-slate-600">
-            Selected: <span className="font-bold text-slate-900">{selectedIds.size}</span> / {items.length}
+            Выбрано: <span className="font-bold text-slate-900">{selectedIds.size}</span> / {items.length}
         </div>
       </div>
 
@@ -81,11 +81,11 @@ export const ProductTable: React.FC<ProductTableProps> = ({ items, selectedIds, 
                     className="rounded border-slate-300"
                 />
               </th>
-              <th className="px-4 py-3">Product Name</th>
+              <th className="px-4 py-3">Наименование</th>
               <th className="px-4 py-3 w-32">GTIN</th>
-              <th className="px-4 py-3 w-32">Serial</th>
-              <th className="px-4 py-3 w-24 text-center">Status</th>
-              <th className="px-4 py-3 w-24 text-center">Valid</th>
+              <th className="px-4 py-3 w-32">Серийный номер</th>
+              <th className="px-4 py-3 w-24 text-center">Статус</th>
+              <th className="px-4 py-3 w-24 text-center">Валиден</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-slate-100">
@@ -113,11 +113,11 @@ export const ProductTable: React.FC<ProductTableProps> = ({ items, selectedIds, 
                 <td className="px-4 py-3 text-center">
                   {item.isPrinted ? (
                     <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-gray-100 text-gray-800">
-                      Printed
+                      Напечатан
                     </span>
                   ) : (
                     <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-blue-50 text-blue-700">
-                      New
+                      Новый
                     </span>
                   )}
                 </td>
@@ -141,7 +141,7 @@ export const ProductTable: React.FC<ProductTableProps> = ({ items, selectedIds, 
       {/* Pagination */}
       <div className="bg-slate-50 px-4 py-3 border-t border-slate-200 flex items-center justify-between">
         <div className="text-xs text-slate-500">
-            Page {currentPage} of {totalPages}
+            Страница {currentPage} из {totalPages}
         </div>
         <div className="flex gap-2">
             <Button 

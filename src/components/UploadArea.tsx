@@ -47,10 +47,10 @@ export const UploadArea: React.FC<UploadAreaProps> = ({ onFileSelect, isProcessi
         </div>
         <div>
           <h3 className="text-lg font-semibold text-slate-900">
-            {error ? "Error Parsing File" : "Upload XML Document"}
+            {error ? "Ошибка обработки файла" : "Загрузите XML документ"}
           </h3>
           <p className="text-sm text-slate-500 mt-1">
-            {error ? error : "Drag and drop your Honest Sign XML file here, or click to browse"}
+            {error ? error : "Перетащите сюда XML файл Честного Знака или нажмите для выбора"}
           </p>
         </div>
       </label>
